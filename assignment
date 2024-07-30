@@ -1,0 +1,86 @@
+#MODELS
+from django.db import models
+from django.contrib.auth.models import User
+
+class ServiceRequest(models.Model):
+    REQUEST_TYPE_CHOICES = [
+        ('installation', 'Installation'),
+        ('repair', 'Repair'),
+        ('maintenance', 'Maintenance'),
+        ('other', 'Other'),
+    ]
+
+    customer = models.ForeignKey(User, on_delete=models.CASCADE)
+    request_type = models.CharField(max_length=20, choices=REQUEST_TYPE_CHOICES)
+    details = models.TextField()
+    attached_file = models.FileField(upload_to='uploads/', blank=True, null=True)
+    status = models.CharField(max_length=20, default='pending')
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.customer.username} - {self.get_request_type_display()}"
+
+
+
+
+
+#FORMS
+from django import forms
+from .models import ServiceRequest
+
+class ServiceRequestForm(forms.ModelForm):
+    class Meta:
+        model = ServiceRequest
+        fields = ['request_type', 'details', 'attached_file']
+
+
+
+
+
+
+#VIEWS
+from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
+from .models import ServiceRequest
+from .forms import ServiceRequestForm
+
+@login_required
+def submit_request(request):
+    if request.method == 'POST':
+        form = ServiceRequestForm(request.POST, request.FILES)
+        if form.is_valid():
+            service_request = form.save(commit=False)
+            service_request.customer = request.user
+            service_request.save()
+            return redirect('request_list')
+    else:
+        form = ServiceRequestForm()
+    return render(request, 'service_requests/request_form.html', {'form': form})
+
+@login_required
+def request_list(request):
+    requests = ServiceRequest.objects.filter(customer=request.user)
+    return render(request, 'service_requests/request_list.html', {'requests': requests})
+
+@login_required
+def request_detail(request, request_id):
+    service_request = ServiceRequest.objects.get(id=request_id, customer=request.user)
+    return render(request, 'service_requests/request_detail.html', {'service_request': service_request})
+
+
+
+
+
+
+#URL 
+Set up URLs in service_requests/urls.py:
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('submit/', views.submit_request, name='submit_request'),
+    path('requests/', views.request_list, name='request_list'),
+    path('requests/<int:request_id>/', views.request_detail, name='request_detail'),
+]
+
